@@ -1,6 +1,6 @@
 # cgram-server
 
-Relay server for [cgram](https://github.com/isalikov/cgram) — an anonymous terminal messenger.
+Relay server for [cgram](https://github.com/isalikov/cgram-cli) — an anonymous terminal messenger.
 
 The server acts as a stateless relay: it stores encrypted blobs and delivers them to recipients. It never sees plaintext messages, does not log IP addresses, and requires no personal information for registration.
 
