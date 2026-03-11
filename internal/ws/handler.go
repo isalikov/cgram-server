@@ -2,7 +2,10 @@ package ws
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log"
+	"net"
 	"net/http"
 
 	"nhooyr.io/websocket"
@@ -51,7 +54,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
 				break
 			}
-			log.Printf("read: %v", err)
+			if !isClientDisconnect(err) {
+				log.Printf("read: %v", err)
+			}
 			break
 		}
 
@@ -73,4 +78,17 @@ type Session struct {
 
 func (s *Session) Send(ctx context.Context, data []byte) error {
 	return s.conn.Write(ctx, websocket.MessageBinary, data)
+}
+
+// isClientDisconnect returns true for errors caused by the client
+// closing the connection without a proper WebSocket close handshake.
+func isClientDisconnect(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		return true
+	}
+	return websocket.CloseStatus(err) != -1
 }
