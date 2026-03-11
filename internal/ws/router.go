@@ -38,6 +38,14 @@ func (r *Router) Handle(ctx context.Context, session *Session, data []byte) erro
 		return r.handleEnvelope(ctx, session, frame.RequestId, p.Envelope)
 	case *pb.Frame_ResolveUsernameRequest:
 		return r.handleResolveUsername(ctx, session, frame.RequestId, p.ResolveUsernameRequest)
+	case *pb.Frame_AddContactRequest:
+		return r.handleAddContact(ctx, session, frame.RequestId, p.AddContactRequest)
+	case *pb.Frame_RemoveContactRequest:
+		return r.handleRemoveContact(ctx, session, frame.RequestId, p.RemoveContactRequest)
+	case *pb.Frame_ListContactsRequest:
+		return r.handleListContacts(ctx, session, frame.RequestId)
+	case *pb.Frame_StatsRequest:
+		return r.handleStats(ctx, session, frame.RequestId)
 	default:
 		return r.sendError(ctx, session, frame.RequestId, 400, "unknown payload type")
 	}
@@ -176,6 +184,84 @@ func (r *Router) handleResolveUsername(ctx context.Context, session *Session, re
 	return r.sendFrame(ctx, session, &pb.Frame{
 		RequestId: reqID,
 		Payload:   &pb.Frame_ResolveUsernameResponse{ResolveUsernameResponse: &pb.ResolveUsernameResponse{UserId: userID}},
+	})
+}
+
+func (r *Router) handleAddContact(ctx context.Context, session *Session, reqID string, req *pb.AddContactRequest) error {
+	if session.userID == "" {
+		return r.sendError(ctx, session, reqID, 401, "not authenticated")
+	}
+
+	userID, username, err := r.handler.contacts.AddContact(ctx, session.userID, req.Username)
+	if err != nil {
+		return r.sendError(ctx, session, reqID, 404, err.Error())
+	}
+
+	return r.sendFrame(ctx, session, &pb.Frame{
+		RequestId: reqID,
+		Payload: &pb.Frame_AddContactResponse{AddContactResponse: &pb.AddContactResponse{
+			UserId:   userID,
+			Username: username,
+		}},
+	})
+}
+
+func (r *Router) handleRemoveContact(ctx context.Context, session *Session, reqID string, req *pb.RemoveContactRequest) error {
+	if session.userID == "" {
+		return r.sendError(ctx, session, reqID, 401, "not authenticated")
+	}
+
+	if err := r.handler.contacts.RemoveContact(ctx, session.userID, req.UserId); err != nil {
+		return r.sendError(ctx, session, reqID, 500, "failed to remove contact")
+	}
+
+	return r.sendFrame(ctx, session, &pb.Frame{
+		RequestId: reqID,
+		Payload:   &pb.Frame_RemoveContactResponse{RemoveContactResponse: &pb.RemoveContactResponse{}},
+	})
+}
+
+func (r *Router) handleListContacts(ctx context.Context, session *Session, reqID string) error {
+	if session.userID == "" {
+		return r.sendError(ctx, session, reqID, 401, "not authenticated")
+	}
+
+	contacts, err := r.handler.contacts.ListContacts(ctx, session.userID)
+	if err != nil {
+		return r.sendError(ctx, session, reqID, 500, "failed to list contacts")
+	}
+
+	var pbContacts []*pb.Contact
+	for _, c := range contacts {
+		pbContacts = append(pbContacts, &pb.Contact{
+			UserId:   c.UserID,
+			Username: c.Username,
+			Online:   r.handler.relay.IsOnline(c.UserID),
+		})
+	}
+
+	return r.sendFrame(ctx, session, &pb.Frame{
+		RequestId: reqID,
+		Payload:   &pb.Frame_ListContactsResponse{ListContactsResponse: &pb.ListContactsResponse{Contacts: pbContacts}},
+	})
+}
+
+func (r *Router) handleStats(ctx context.Context, session *Session, reqID string) error {
+	if session.userID == "" {
+		return r.sendError(ctx, session, reqID, 401, "not authenticated")
+	}
+
+	totalUsers, err := r.handler.contacts.TotalUsers(ctx)
+	if err != nil {
+		return r.sendError(ctx, session, reqID, 500, "failed to get stats")
+	}
+
+	return r.sendFrame(ctx, session, &pb.Frame{
+		RequestId: reqID,
+		Payload: &pb.Frame_StatsResponse{StatsResponse: &pb.StatsResponse{
+			TotalUsers:  totalUsers,
+			OnlineUsers: r.handler.relay.OnlineCount(),
+		}},
 	})
 }
 

@@ -2,10 +2,8 @@ module github.com/isalikov/cgram-server
 
 go 1.26.1
 
-replace github.com/isalikov/cgram-proto => ../cgram-proto
-
 require (
-	github.com/isalikov/cgram-proto v0.0.0-00010101000000-000000000000
+	github.com/isalikov/cgram-proto v1.1.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
 	golang.org/x/crypto v0.48.0

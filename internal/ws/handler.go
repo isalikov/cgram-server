@@ -11,6 +11,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/isalikov/cgram-server/internal/auth"
+	"github.com/isalikov/cgram-server/internal/contacts"
 	"github.com/isalikov/cgram-server/internal/keystore"
 	"github.com/isalikov/cgram-server/internal/relay"
 )
@@ -19,14 +20,16 @@ type Handler struct {
 	auth     *auth.Service
 	keys     *keystore.Service
 	relay    *relay.Service
+	contacts *contacts.Service
 	router   *Router
 }
 
-func NewHandler(auth *auth.Service, keys *keystore.Service, relay *relay.Service) *Handler {
+func NewHandler(auth *auth.Service, keys *keystore.Service, relay *relay.Service, contacts *contacts.Service) *Handler {
 	h := &Handler{
-		auth:  auth,
-		keys:  keys,
-		relay: relay,
+		auth:     auth,
+		keys:     keys,
+		relay:    relay,
+		contacts: contacts,
 	}
 	h.router = NewRouter(h)
 	return h

@@ -1,4 +1,4 @@
-.PHONY: build run clean test dev dev-up dev-down help
+.PHONY: build run clean test dev dev-up dev-down vendor help
 
 help:
 	@echo "Usage: make [target]"
@@ -27,6 +27,10 @@ dev-up:
 
 dev-down:
 	docker compose -f docker-compose.dev.yml down
+
+vendor:
+	go mod tidy
+	go mod vendor
 
 clean:
 	rm -rf ./bin
