@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -53,5 +54,5 @@ func buildDatabaseURL() string {
 	}
 
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		user, password, host, port, name, sslmode)
+		url.QueryEscape(user), url.QueryEscape(password), host, port, name, sslmode)
 }

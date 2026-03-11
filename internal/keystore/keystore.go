@@ -22,7 +22,13 @@ type PreKeyBundle struct {
 	OneTimePreKey        []byte // may be nil if exhausted
 }
 
+const maxOneTimeKeys = 100
+
 func (s *Service) UploadPreKeys(ctx context.Context, userID string, signedPreKey, signature []byte, oneTimeKeys [][]byte) error {
+	if len(oneTimeKeys) > maxOneTimeKeys {
+		return fmt.Errorf("too many one-time keys (max %d)", maxOneTimeKeys)
+	}
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -74,10 +80,10 @@ func (s *Service) FetchPreKey(ctx context.Context, userID string) (*PreKeyBundle
 		return nil, fmt.Errorf("pre-key not found")
 	}
 
-	// Try to consume one one-time pre-key
+	// Try to consume one one-time pre-key (FOR UPDATE SKIP LOCKED prevents races)
 	err = s.pool.QueryRow(ctx, `
 		DELETE FROM one_time_pre_keys
-		WHERE id = (SELECT id FROM one_time_pre_keys WHERE user_id = $1 LIMIT 1)
+		WHERE id = (SELECT id FROM one_time_pre_keys WHERE user_id = $1 ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)
 		RETURNING key_data
 	`, userID).Scan(&bundle.OneTimePreKey)
 	if err != nil {

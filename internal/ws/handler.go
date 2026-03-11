@@ -39,6 +39,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 
+	// Limit incoming message size to 64 KB to prevent memory abuse
+	conn.SetReadLimit(64 * 1024)
+
 	ctx := r.Context()
 	session := &Session{conn: conn}
 

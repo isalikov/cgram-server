@@ -44,12 +44,22 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", handler)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if err := db.Pool().Ping(r.Context()); err != nil {
+			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
 
 	server := &http.Server{
-		Addr:         cfg.ListenAddr,
-		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		Addr:              cfg.ListenAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {
@@ -57,7 +67,12 @@ func main() {
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
 		log.Println("shutting down...")
-		server.Shutdown(ctx)
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("shutdown error: %v", err)
+		}
+		cancel()
 	}()
 
 	log.Printf("listening on %s", cfg.ListenAddr)

@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"fmt"
+	"log"
 
 	pb "github.com/isalikov/cgram-proto/gen/proto"
 	"google.golang.org/protobuf/proto"
@@ -19,7 +20,7 @@ func NewRouter(h *Handler) *Router {
 func (r *Router) Handle(ctx context.Context, session *Session, data []byte) error {
 	frame := &pb.Frame{}
 	if err := proto.Unmarshal(data, frame); err != nil {
-		return r.sendError(ctx, session, frame.RequestId, 400, "invalid frame")
+		return r.sendError(ctx, session, "", 400, "invalid frame")
 	}
 
 	switch p := frame.Payload.(type) {
@@ -35,6 +36,8 @@ func (r *Router) Handle(ctx context.Context, session *Session, data []byte) erro
 		return r.handleFetchPreKey(ctx, session, frame.RequestId, p.FetchPreKeyRequest)
 	case *pb.Frame_Envelope:
 		return r.handleEnvelope(ctx, session, frame.RequestId, p.Envelope)
+	case *pb.Frame_ResolveUsernameRequest:
+		return r.handleResolveUsername(ctx, session, frame.RequestId, p.ResolveUsernameRequest)
 	default:
 		return r.sendError(ctx, session, frame.RequestId, 400, "unknown payload type")
 	}
@@ -67,7 +70,7 @@ func (r *Router) handleLogin(ctx context.Context, session *Session, reqID string
 
 	// Flush queued messages
 	if err := r.handler.relay.FlushQueue(ctx, userID, session.conn); err != nil {
-		fmt.Printf("flush queue: %v\n", err)
+		log.Printf("flush queue: %v", err)
 	}
 
 	return r.sendFrame(ctx, session, &pb.Frame{
@@ -76,8 +79,12 @@ func (r *Router) handleLogin(ctx context.Context, session *Session, reqID string
 	})
 }
 
-func (r *Router) handleLogout(ctx context.Context, session *Session, reqID string, req *pb.LogoutRequest) error {
-	r.handler.auth.Logout(ctx, req.SessionToken)
+func (r *Router) handleLogout(ctx context.Context, session *Session, reqID string, _ *pb.LogoutRequest) error {
+	if session.userID == "" {
+		return r.sendError(ctx, session, reqID, 401, "not authenticated")
+	}
+
+	r.handler.auth.Logout(ctx, session.token)
 	r.handler.relay.Unregister(session.userID)
 	session.userID = ""
 	session.token = ""
@@ -134,6 +141,10 @@ func (r *Router) handleEnvelope(ctx context.Context, session *Session, reqID str
 		return r.sendError(ctx, session, reqID, 401, "not authenticated")
 	}
 
+	if env.RecipientId == "" {
+		return r.sendError(ctx, session, reqID, 400, "recipient_id is required")
+	}
+
 	// Serialize the envelope to deliver as-is
 	envData, err := proto.Marshal(&pb.Frame{
 		Payload: &pb.Frame_Envelope{Envelope: env},
@@ -148,7 +159,23 @@ func (r *Router) handleEnvelope(ctx context.Context, session *Session, reqID str
 
 	return r.sendFrame(ctx, session, &pb.Frame{
 		RequestId: reqID,
-		Payload:   &pb.Frame_Ack{Ack: &pb.Ack{MessageId: env.RecipientId, Delivered: true}},
+		Payload:   &pb.Frame_Ack{Ack: &pb.Ack{MessageId: reqID, Delivered: true}},
+	})
+}
+
+func (r *Router) handleResolveUsername(ctx context.Context, session *Session, reqID string, req *pb.ResolveUsernameRequest) error {
+	if session.userID == "" {
+		return r.sendError(ctx, session, reqID, 401, "not authenticated")
+	}
+
+	userID, err := r.handler.auth.ResolveUsername(ctx, req.Username)
+	if err != nil {
+		return r.sendError(ctx, session, reqID, 404, "user not found")
+	}
+
+	return r.sendFrame(ctx, session, &pb.Frame{
+		RequestId: reqID,
+		Payload:   &pb.Frame_ResolveUsernameResponse{ResolveUsernameResponse: &pb.ResolveUsernameResponse{UserId: userID}},
 	})
 }
 
