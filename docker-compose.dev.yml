@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: cgram-postgres
+    environment:
+      POSTGRES_USER: cgram
+      POSTGRES_PASSWORD: cgram
+      POSTGRES_DB: cgram
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
