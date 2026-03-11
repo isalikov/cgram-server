@@ -8,7 +8,7 @@ RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-# Clone proto dependency (referenced by replace directive in go.mod)
+# Clone proto dependency (gen/ must be committed in cgram-proto)
 RUN git clone https://github.com/isalikov/cgram-proto.git /cgram-proto
 
 COPY go.mod go.sum ./
